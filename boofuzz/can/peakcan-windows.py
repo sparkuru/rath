@@ -7,33 +7,32 @@ pip install python-can boofuzz
 python peakcan.py -s 15        # 侦听 15 秒
 python peakcan.py -c can1 -s 30   # 指定通道，侦听 30 秒
 
-指定 channel 为 can1
-python peakcan.py -c can1
+# Windows
+python peakcan-windows.py -s 15
+python peakcan-windows.py -c PCAN_USBBUS1 -b 500000 -i 0x10
+
+指定 channel 为 PCAN_USBBUS2
+python peakcan-windows.py -c PCAN_USBBUS2
 
 指定 ARBITRATION_ID 为 0x123
-python peakcan.py -b 250000 -i 0x123
+python peakcan-windows.py -b 250000 -i 0x123
 
 指定 bitrate 为 250000
-python peakcan.py -b 250000
+python peakcan-windows.py -b 250000
 """
 
-import subprocess
 import time
 import can
 from boofuzz import *
 
-# 定义 can 类型, `sudo ip link set can1 up type can bitrate 500000`
-INTERFACE = "socketcan"
-# peakcan 总线通道名, `ip -br a`
-CHANNEL = "can0"
-# peakcan 总线波特率
+INTERFACE = "pcan"
+CHANNEL = "PCAN_USBBUS1"
 BITRATE = 500000
-# can 总线订阅的信息号
 ARBITRATION_ID = 0x123
 
 
 class PeakCANConnection(ITargetConnection):
-    """PEAK CAN connection for boofuzz fuzzing via SocketCAN interface."""
+    """PEAK CAN connection for boofuzz fuzzing via PCAN interface on Windows."""
 
     def __init__(
         self,
@@ -49,8 +48,11 @@ class PeakCANConnection(ITargetConnection):
         self.bus = None
 
     def open(self):
-        self._setup_interface()
-        self.bus = can.interface.Bus(channel=self.channel, interface=INTERFACE)
+        self.bus = can.interface.Bus(
+            channel=self.channel,
+            interface=INTERFACE,
+            bitrate=self.bitrate,
+        )
 
     def close(self):
         if self.bus:
@@ -61,7 +63,7 @@ class PeakCANConnection(ITargetConnection):
         if not self.bus:
             raise Exception("CAN bus not opened")
 
-        payload = bytes(data)[:8]  # CAN frame max 8 bytes
+        payload = bytes(data)[:8]
         msg = can.Message(
             arbitration_id=self.arbitration_id,
             data=payload,
@@ -83,41 +85,6 @@ class PeakCANConnection(ITargetConnection):
     @property
     def info(self):
         return f"PEAK CAN ({self.channel}, {self.bitrate}bps, ID=0x{self.arbitration_id:X})"
-
-    def _setup_interface(self):
-        try:
-            subprocess.run(
-                ["ip", "link", "set", self.channel, "down"],
-                capture_output=True,
-                check=False,
-            )
-            subprocess.run(
-                [
-                    "ip",
-                    "link",
-                    "set",
-                    self.channel,
-                    "type",
-                    "can",
-                    "bitrate",
-                    str(self.bitrate),
-                ],
-                capture_output=True,
-                check=True,
-            )
-            subprocess.run(
-                ["ip", "link", "set", self.channel, "up"],
-                capture_output=True,
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Failed to setup CAN interface: {e}")
-
-    def _check_interface(self):
-        result = subprocess.run(
-            ["ip", "link", "show", self.channel], capture_output=True, text=True
-        )
-        return "UP" in result.stdout
 
 
 def define_can_protocol():
@@ -174,9 +141,9 @@ def create_session(
     return session
 
 
-def run_receiver(channel=CHANNEL, timeout=None):
+def run_receiver(channel=CHANNEL, bitrate=500000, timeout=None):
     """Monitor CAN bus for incoming messages."""
-    bus = can.interface.Bus(channel=channel, interface=INTERFACE)
+    bus = can.interface.Bus(channel=channel, interface=INTERFACE, bitrate=bitrate)
     print(f"Listening on {channel}...")
 
     start_time = time.time()
@@ -194,9 +161,9 @@ def run_receiver(channel=CHANNEL, timeout=None):
         bus.shutdown()
 
 
-def run_listener(channel=CHANNEL, duration=10):
+def run_listener(channel=CHANNEL, bitrate=500000, duration=10):
     """Analyze CAN bus traffic and generate boofuzz protocol suggestions."""
-    bus = can.interface.Bus(channel=channel, interface=INTERFACE)
+    bus = can.interface.Bus(channel=channel, interface=INTERFACE, bitrate=bitrate)
     print(f"Analyzing CAN traffic on {channel} for {duration}s...")
     print("-" * 70)
 
@@ -280,8 +247,13 @@ def run_listener(channel=CHANNEL, duration=10):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="PEAK CAN Fuzzer via SocketCAN")
-    parser.add_argument("-c", "--channel", default=CHANNEL, help="CAN interface")
+    parser = argparse.ArgumentParser(description="PEAK CAN Fuzzer via PCAN (Windows)")
+    parser.add_argument(
+        "-c",
+        "--channel",
+        default=CHANNEL,
+        help="CAN interface (PCAN_USBBUS1, PCAN_USBBUS2, etc.)",
+    )
     parser.add_argument("-b", "--bitrate", type=int, default=500000, help="Bitrate")
     parser.add_argument(
         "-i",
@@ -308,9 +280,9 @@ def main():
     args = parser.parse_args()
 
     if args.listen:
-        run_listener(args.channel, args.listen)
+        run_listener(args.channel, args.bitrate, args.listen)
     elif args.monitor:
-        run_receiver(args.channel)
+        run_receiver(args.channel, args.bitrate)
     else:
         session = create_session(
             channel=args.channel,

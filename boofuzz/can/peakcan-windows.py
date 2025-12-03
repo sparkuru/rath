@@ -1,23 +1,21 @@
 # -*- coding: utf-8 -*-
 
 """
-pip install python-can boofuzz
+# windows 安装 PCAN 驱动：https://www.peak-system.com/Drivers.523.0.html
 
-# Linux
-python peakcan.py -s 15        # 侦听 15 秒
-python peakcan.py -c can1 -s 30   # 指定通道，侦听 30 秒
+pip install python-can boofuzz psutil
 
 # Windows
-python peakcan-windows.py -s 15
-python peakcan-windows.py -c PCAN_USBBUS1 -b 500000 -i 0x10
+python peakcan-windows.py -s 15 # 侦听 15 秒
+python peakcan-windows.py -c PCAN_USBBUS1 -b 500000 -i 0x10 -s 30 # 指定通道，波特率，信息号，侦听 30 秒
 
-指定 channel 为 PCAN_USBBUS2
+# 指定 channel 为 PCAN_USBBUS2
 python peakcan-windows.py -c PCAN_USBBUS2
 
-指定 ARBITRATION_ID 为 0x123
-python peakcan-windows.py -b 250000 -i 0x123
+# 指定 ARBITRATION_ID 为 0x123
+python peakcan-windows.py -i 0x123
 
-指定 bitrate 为 250000
+# 指定 bitrate 为 250000
 python peakcan-windows.py -b 250000
 """
 
@@ -26,14 +24,13 @@ import can
 from boofuzz import *
 
 INTERFACE = "pcan"
+# 在设备管理器找对应 peakcan 设备，查看详情里有 CHANNEL 名称
 CHANNEL = "PCAN_USBBUS1"
 BITRATE = 500000
 ARBITRATION_ID = 0x123
 
 
 class PeakCANConnection(ITargetConnection):
-    """PEAK CAN connection for boofuzz fuzzing via PCAN interface on Windows."""
-
     def __init__(
         self,
         channel=CHANNEL,
@@ -88,7 +85,6 @@ class PeakCANConnection(ITargetConnection):
 
 
 def define_can_protocol():
-    """Define CAN protocol structure for fuzzing."""
     s_initialize("peakcan_protocol")
 
     with s_block("frame"):
@@ -101,7 +97,6 @@ def define_can_protocol():
 
 
 def define_extended_protocol():
-    """Extended CAN protocol with more fuzz targets."""
     s_initialize("peakcan_extended")
 
     with s_block("header"):
@@ -115,9 +110,12 @@ def define_extended_protocol():
 
 
 def create_session(
-    channel=CHANNEL, bitrate=500000, arb_id=0x123, web_port=26000, extended=False
+    channel=CHANNEL,
+    bitrate=500000,
+    arb_id=ARBITRATION_ID,
+    web_port=26000,
+    extended=False,
 ):
-    """Create boofuzz fuzzing session for PEAK CAN."""
     connection = PeakCANConnection(
         channel=channel, bitrate=bitrate, arbitration_id=arb_id
     )
@@ -142,7 +140,6 @@ def create_session(
 
 
 def run_receiver(channel=CHANNEL, bitrate=500000, timeout=None):
-    """Monitor CAN bus for incoming messages."""
     bus = can.interface.Bus(channel=channel, interface=INTERFACE, bitrate=bitrate)
     print(f"Listening on {channel}...")
 
@@ -162,7 +159,6 @@ def run_receiver(channel=CHANNEL, bitrate=500000, timeout=None):
 
 
 def run_listener(channel=CHANNEL, bitrate=500000, duration=10):
-    """Analyze CAN bus traffic and generate boofuzz protocol suggestions."""
     bus = can.interface.Bus(channel=channel, interface=INTERFACE, bitrate=bitrate)
     print(f"Analyzing CAN traffic on {channel} for {duration}s...")
     print("-" * 70)
@@ -198,7 +194,7 @@ def run_listener(channel=CHANNEL, bitrate=500000, duration=10):
         return
 
     print("\n" + "=" * 70)
-    print("CAN Traffic Analysis Report")
+    print("CAN 链路信息搜集")
     print("=" * 70 + "\n")
 
     for arb_id in sorted(messages.keys()):
@@ -215,7 +211,7 @@ def run_listener(channel=CHANNEL, bitrate=500000, duration=10):
         print()
 
     print("=" * 70)
-    print("Suggested boofuzz Protocol Definition")
+    print("boofuzz 协议定义建议参考")
     print("=" * 70 + "\n")
 
     for arb_id in sorted(messages.keys()):
@@ -259,8 +255,8 @@ def main():
         "-i",
         "--arb-id",
         type=lambda x: int(x, 0),
-        default=0x123,
-        help="Arbitration ID (hex: 0x123)",
+        default=ARBITRATION_ID,
+        help="Arbitration ID (like hex: 0x123)",
     )
     parser.add_argument("-p", "--port", type=int, default=26000, help="Web UI port")
     parser.add_argument(

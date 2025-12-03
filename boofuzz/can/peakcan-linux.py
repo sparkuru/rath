@@ -22,7 +22,7 @@ import time
 import can
 from boofuzz import *
 
-# 定义 can 类型, `sudo ip link set can1 up type can bitrate 500000`
+# 定义 can 类型, `sudo ip link set can0 up type can bitrate 500000`
 INTERFACE = "socketcan"
 # peakcan 总线通道名, `ip -br a`
 CHANNEL = "can0"
@@ -148,7 +148,7 @@ def define_extended_protocol():
 
 
 def create_session(
-    channel=CHANNEL, bitrate=500000, arb_id=0x123, web_port=26000, extended=False
+    channel=CHANNEL, bitrate=BITRATE, arb_id=ARBITRATION_ID, web_port=26000, extended=False
 ):
     """Create boofuzz fuzzing session for PEAK CAN."""
     connection = PeakCANConnection(
@@ -282,12 +282,12 @@ def main():
 
     parser = argparse.ArgumentParser(description="PEAK CAN Fuzzer via SocketCAN")
     parser.add_argument("-c", "--channel", default=CHANNEL, help="CAN interface")
-    parser.add_argument("-b", "--bitrate", type=int, default=500000, help="Bitrate")
+    parser.add_argument("-b", "--bitrate", type=int, default=BITRATE, help="Bitrate")
     parser.add_argument(
         "-i",
         "--arb-id",
         type=lambda x: int(x, 0),
-        default=0x123,
+        default=ARBITRATION_ID,
         help="Arbitration ID (hex: 0x123)",
     )
     parser.add_argument("-p", "--port", type=int, default=26000, help="Web UI port")
